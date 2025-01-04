@@ -1,5 +1,3 @@
-
-
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
 
@@ -47,5 +45,3 @@ void loop() {
   setServoAngle(servonum ,angle);
   delay(2000);
 
-
-}
