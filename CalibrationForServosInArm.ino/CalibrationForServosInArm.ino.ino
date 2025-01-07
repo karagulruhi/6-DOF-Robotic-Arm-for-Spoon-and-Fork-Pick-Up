@@ -38,10 +38,19 @@ void setServoAngle(uint8_t servo, uint8_t angle) {
   Serial.print(" açısı: ");
   Serial.println(angle);
 }
-uint8_t servonum = 0; 
-uint8_t angle = 90;
+uint8_t servonum1 = 0; 
+uint8_t servonum2 = 1; 
+uint8_t servonum3 = 2; 
+uint8_t servonum4 = 3; 
+uint8_t servonum5 = 4; 
+uint8_t servonum6 = 6; 
+
+uint8_t angle = 45;
+uint8_t angle1 = 90;
 void loop() {
  
-  setServoAngle(servonum ,angle);
-  delay(2000);
+  setServoAngle(servonum3,angle1);
+  delay(1000);
 
+
+}

@@ -1,6 +1,6 @@
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
-
+#define DEBUG
 // PWM sürücüsünü oluştur
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
@@ -13,7 +13,7 @@ uint8_t servonum2 = 1;
 uint8_t servonum3 = 2; 
 uint8_t servonum4 = 3; 
 uint8_t servonum5 = 4; 
-uint8_t servonum6 = 5; //gripper
+uint8_t servonum6 = 6; //gripper
 
 float Pi = 3.14;     // π取值
 float L0 = 60 + 30;  // 30为机械臂底部圆盘距离检测边缘距离，根据实际调整,60为圆盘底座固定值。
@@ -116,8 +116,9 @@ uint8_t servos[][3] = {
   {0, 0, 180},        // Servo 1: 0° - 180°
   {1, 0, 170},        // Servo 2: 0° - 170°
   {2, 0, 174.4},      // Servo 3: 0° - 174.4°
-  {15, 19.44, 161.76}, // Servo 4: 19.44° - 161.76°
-  {4, 9, 180}         // Servo 5: 9° - 180°
+  {3, 19.44, 161.76}, // Servo 4: 19.44° - 161.76°
+  {4, 9, 180},
+  {6, 0, 180}          // Servo 5: 9° - 180°
 };
 
 void setServoAngle(uint8_t servo, uint8_t angle) {
@@ -133,16 +134,24 @@ void setServoAngle(uint8_t servo, uint8_t angle) {
 }
 
 void loop() {
-  Inverse_kinematics(270,270, 150); 
-  setServoAngle(servonum1, 180 - Theta_1);
-  delay(10);
+  Inverse_kinematics(-250,80, 110); 
+  setServoAngle(servonum1, Theta_1);
+  
   setServoAngle(servonum2, Theta_2);
-  delay(10);
-  setServoAngle(servonum3, Theta_3);
-  delay(10);
-  setServoAngle(servonum4, Theta_4);
-
+  
+  setServoAngle(servonum3, 180-Theta_3);
+  
+  setServoAngle(servonum4, 180-Theta_4);
+  
   setServoAngle(servonum5, 90);
+  
+  setServoAngle(servonum6, 45);
+  
+
+
+
+
+
 
   #ifdef DEBUG
   Serial.print(" Servo: ");
@@ -152,6 +161,6 @@ void loop() {
   Serial.print("\t");
   Serial.print(180 - Theta_3);
   Serial.print("\t");
-  Serial.println(180 - Theta_4);
+  Serial.println(Theta_4);
   #endif
 } 
