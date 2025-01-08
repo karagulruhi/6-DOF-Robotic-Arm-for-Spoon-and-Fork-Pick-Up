@@ -8,12 +8,12 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define SERVOMAX  600 // Maksimum darbe genişliği (out of 4096)
 #define SERVO_FREQ 60  // Analog servolar ~50 Hz'de çalışır
 
-uint8_t servonum1 = 0;
-uint8_t servonum2 = 1;
-uint8_t servonum3 = 2; 
-uint8_t servonum4 = 3; 
-uint8_t servonum5 = 4; 
-uint8_t servonum6 = 6; //gripper
+uint8_t servonum1 = 15;
+uint8_t servonum2 =14;
+uint8_t servonum3 = 13; 
+uint8_t servonum4 = 11; 
+uint8_t servonum5 = 10; 
+uint8_t servonum6 = 8; //gripper
 
 float Pi = 3.14;     // π取值
 float L0 = 60 + 30;  // 30为机械臂底部圆盘距离检测边缘距离，根据实际调整,60为圆盘底座固定值。
@@ -123,29 +123,52 @@ uint8_t servos[][3] = {
 
 void setServoAngle(uint8_t servo, uint8_t angle) {
   // Servo'nun min ve max açılarını al
-  float minAngle = servos[servo][1]; // Min açı
-  float maxAngle = servos[servo][2]; // Max açı
 
   // Açıyı PWM'e dönüştür
-  uint16_t pulselen = map(angle, minAngle, maxAngle, SERVOMIN, SERVOMAX);
+  uint16_t pulselen = map(angle, 0, 180, SERVOMIN, SERVOMAX);
 
   // PWM değerini servo motoruna gönder
-  pwm.setPWM(servos[servo][0], 0, pulselen); // servos[servo][0] servo motorunun pin numarasını belirtir
+  pwm.setPWM(servo, 0, pulselen); // servos[servo][0] servo motorunun pin numarasını belirtir
 }
 
-void loop() {
-  Inverse_kinematics(-250,80, 110); 
-  setServoAngle(servonum1, Theta_1);
+
+int x= -130;
+int y= 350;
+
+int z= 150;
+int x_max=370;
+int x_min=250;
+int y_min=250;
+int y_max=370;
+int xy_max=20;
+void kinematic_verse(){
+  Theta_1 = constrain(Theta_1, 0, 180);
+  Theta_2 = constrain(Theta_2, 0, 172);
+  Theta_3 = constrain(Theta_3, 0, 178);
+  Theta_4 = constrain(Theta_4, 20, 170);
   
-  setServoAngle(servonum2, Theta_2);
   
+ 
+
+  Inverse_kinematics(x,y, z);
+  setServoAngle(servonum1,Theta_1);
+  delay(10);
+  setServoAngle(servonum2,Theta_2);
+  delay(10);
   setServoAngle(servonum3, 180-Theta_3);
-  
-  setServoAngle(servonum4, 180-Theta_4);
-  
+  delay(10);
+  setServoAngle(servonum4,0);
+  delay(10);
+
   setServoAngle(servonum5, 90);
-  
-  setServoAngle(servonum6, 45);
+ 
+  delay(10);
+
+}
+
+
+void loop() {
+  kinematic_verse();
   
 
 
@@ -159,7 +182,7 @@ void loop() {
   Serial.print("\t");
   Serial.print(Theta_2);
   Serial.print("\t");
-  Serial.print(180 - Theta_3);
+  Serial.print(Theta_3);
   Serial.print("\t");
   Serial.println(Theta_4);
   #endif
