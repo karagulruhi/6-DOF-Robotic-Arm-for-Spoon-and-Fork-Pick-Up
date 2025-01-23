@@ -144,53 +144,10 @@ int currentTheta_4 = 30;
 int currentTheta_5 = 90;
 
 // Global değişkenler
-int x_robot = 260;
-int y_robot = 260;
+float x_robot = 260;
+float y_robot = 260;
 bool obj_type =-1;
 bool pickObj = false;
-float previousX = 0, previousY = 0; // Önceki koordinatları sakla
-float tolerance = 5.0; // Tolerans değeri (örneğin 10 birim)
-
-void parseData(String data) {
-  Serial.print(data);
-  int commaIndex1 = data.indexOf(',');
-  int commaIndex2 = data.indexOf(',', commaIndex1 + 1);
-  int commaIndex3 = data.indexOf(',', commaIndex2 + 1);
-  int commaIndex4 = data.indexOf(',', commaIndex3 + 1);
-
-  if (commaIndex1 != -1 && commaIndex2 != -1 && commaIndex3 != -1 && commaIndex4 != -1) {
-    float obj_X_min = data.substring(0, commaIndex1).toFloat();
-    float obj_Y_min = data.substring(commaIndex1 + 1, commaIndex2).toFloat();
-    float obj_X_max = data.substring(commaIndex2 + 1, commaIndex3).toFloat();
-    float obj_Y_max = data.substring(commaIndex3 + 1, commaIndex4).toFloat();
-    obj_type = (data.substring(commaIndex4 + 1).toInt() == 1); // "1" -> Spoon, "0" -> Fork
-
-    // Nesnenin merkez koordinatlarını hesapla
-    float obj_corX = (obj_X_min + obj_X_max) / 2.0;
-    float obj_corY = (obj_Y_min + obj_Y_max) / 2.0;
-
-    Serial.print("aklınala oynamaya geldim");
-    x_robot = robot_X_min + (obj_corX - x_camera_min) * (robot_X_max - robot_X_min) / (x_camera_max - x_camera_min);
-    y_robot = robot_Y_min + (obj_corY - y_camera_min) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min);
-
-   
-
-    pickObj= false;
-
-    // Bilgiyi yazdır
-    Serial.print("Robot X: ");
-    Serial.print(x_robot);
-    Serial.print(", Robot Y: ");
-    Serial.print(y_robot);
-    Serial.print(", Object Type: ");
-    Serial.println(obj_type ? "Spoon" : "Fork");
-  } else {
-    Serial.println("data");
-    Serial.println("Invalid data received");
-    pickObj= true;
-  }
-  
-}
 
 
 void setServoAngle(uint8_t servo, uint8_t angle) {
@@ -268,11 +225,12 @@ void moveToPosition(bool act, int x, int y, int z, float tet1 = -1, float tet2 =
   
 
 }
-bool isGoObjAllowed = true;
+
 void go_obj() {
 
+
     Serial.println("Obje tespit edildi, objeye gidiliyor...");
-    moveToPosition(true,x_robot, y_robot, 150, -1, 120, 90, -1, true, 10);
+    moveToPosition(true,x_robot, y_robot, 200, -1, 120, 90, -1, true, 10);
     delay(10);
     Serial.println("Mıknatıs aktifleştiriliyor...");
     moveToPosition(true,x_robot, y_robot, 200, -1, -1, -1, 5, true, 10);
@@ -281,14 +239,14 @@ void go_obj() {
 
     if (obj_type == 0) {  // Çatal
         Serial.println("Robot çatalı çöpe atmaya gidiyor...");
-        moveToPosition(true, -210, 230, 250, -1, 120, 90, 90, true, 40);
-        moveToPosition(false, -210, 230, 250, -1, 80, 90, 90, true, 40);
+        moveToPosition(true, -150, 230, 250, -1, 120, 90, 90, true, 40);
+        moveToPosition(false, -150, 230, 250, -1, 80, 90, 90, true, 40);
         delay(1000);
 
     } else if (obj_type == 1) {  // Kaşık
         Serial.println("Robot kaşığı çöpe atmaya gidiyor...");
-        moveToPosition(true, -260, 60, 250, -1, 120, 90, 80, true, 40);
-        moveToPosition(false, -260, 60, 250, -1, 80, 90, 80, true, 40);
+        moveToPosition(true, -170, 60, 250, -1, 120, 90, 80, true, 40);
+        moveToPosition(false, -170, 60, 250, -1, 80, 90, 80, true, 40);
         delay(1000);
     } else {
         Serial.println("Hata: Obje tipi tanımlanamıyor!");
@@ -301,33 +259,69 @@ void go_obj() {
 
 void go_home() {
   Serial.println("Robot eve gidiyor...");
-  moveToPosition(0, 0, 0,0, 180, 120, 80, 10, true);  // Home pozisyonu için sabit açı değerleri
+  moveToPosition(0, 0, 0,0, 180, 120, 80, 5, true);  // Home pozisyonu için sabit açı değerleri
  // Robotun ev pozisyonuna gitmesi için hareket
 }
 
-bool isMoved=false;
-void loop() {
+
+void parseData(String data) {
+  Serial.print("Alınan veri: ");
+  Serial.println(data);
   
 
+  int commaIndex1 = data.indexOf(',');
+  int commaIndex2 = data.indexOf(',', commaIndex1 + 1);
+  int commaIndex3 = data.indexOf(',', commaIndex2 + 1);
+  int commaIndex4 = data.indexOf(',', commaIndex3 + 1);
+
+  if (commaIndex1 != -1 && commaIndex2 != -1 && commaIndex3 != -1 && commaIndex4 != -1) {
+    float obj_X_min = data.substring(0, commaIndex1).toFloat();
+    float obj_Y_min = data.substring(commaIndex1 + 1, commaIndex2).toFloat();
+    float obj_X_max = data.substring(commaIndex2 + 1, commaIndex3).toFloat();
+    float obj_Y_max = data.substring(commaIndex3 + 1, commaIndex4).toFloat();
+    obj_type = (data.substring(commaIndex4 + 1).toInt() == 1); // "1" -> Kaşık, "0" -> Çatal
+
+    // Nesnenin merkez koordinatlarını hesapla
+    float obj_corX = (obj_X_min + obj_X_max) / 2.0;
+    float obj_corY = (obj_Y_min + obj_Y_max) / 2.0;
+
+ 
+
+    // Kameradan gelen koordinatları robot koordinatlarına dönüştür
+    x_robot = robot_X_min + (obj_corX - x_camera_min) * (robot_X_max - robot_X_min) / (x_camera_max - x_camera_min);
+    y_robot = robot_Y_min + (obj_corY - y_camera_min) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min);
+    pickObj = false;
+    
+  } else {
+    Serial.println("Hatalı veri formatı! Beklenen format: xmin,ymin,xmax,ymax,object_type");
+    pickObj = true;
+  }
+}
+
+
+
+
+String lastDetectedObject = "";
+bool isMoved = false;
+
+void loop() {
   if (Serial.available() > 0) {
     String data = Serial.readStringUntil('\n');
     parseData(data);
-    if(!pickObj){
-      Serial.print("Alınan veri: ");
-      Serial.println(data);
+    
+    if (!pickObj) {
+      Serial.println("PROCESSING_START"); // İşlem başlangıç sinyali
       go_obj();
-      isMoved=true;
-  }}
-    else{
-      go_home();
-  }
-  if(isMoved){
+      isMoved = true;
+    }
+  }else{go_home();}
 
+  if (isMoved) {
     go_home();
-    isMoved=false;
+    isMoved = false;
+    Serial.println("READY"); // Hazır olduğunu bildir
     delay(1000);
   }
-  delay(1000);
 
 
   // Debug verileri yazdır
@@ -343,8 +337,4 @@ void loop() {
   #endif
 }
 
-
 // Hareket tamamlandığında bu fonksiyon çağrılabilir
-
-
-
