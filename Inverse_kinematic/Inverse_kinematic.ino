@@ -11,12 +11,12 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define RELAY_PIN 7 
   // Analog servolar ~50 Hz'de çalışır
 
-uint8_t servonum1 = 15;
-uint8_t servonum2 =14;
-uint8_t servonum3 = 13; 
-uint8_t servonum4 = 11; 
-uint8_t servonum5 = 10; 
-uint8_t servonum6 = 8; //gripper
+uint8_t servonum1 = 9;
+uint8_t servonum2 =15;
+uint8_t servonum3 = 14; 
+uint8_t servonum4 = 12; 
+uint8_t servonum5 = 11; 
+uint8_t servonum6 = 8; 
 
 float Pi = 3.14;     // π取值
 float L0 = 60 + 30;  // 30为机械臂底部圆盘距离检测边缘距离，根据实际调整,60为圆盘底座固定值。

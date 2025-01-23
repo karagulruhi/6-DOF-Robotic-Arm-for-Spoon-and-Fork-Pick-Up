@@ -2,7 +2,7 @@
 #include <Adafruit_PWMServoDriver.h>
 #define DEBUG
 // PWM sürücüsünü oluştur
-Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 
 #define SERVOMIN  150 // Minimum darbe genişliği (out of 4096)
 #define SERVOMAX  600 // Maksimum darbe genişliği (out of 4096)
@@ -11,12 +11,20 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define RELAY_PIN 7 
   // Analog servolar ~50 Hz'de çalışır
 
-uint8_t servonum1 = 15;
-uint8_t servonum2 =14;
-uint8_t servonum3 = 13; 
-uint8_t servonum4 = 11; 
-uint8_t servonum5 = 10; 
-uint8_t servonum6 = 8; //gripper
+uint8_t servonum1 = 9;
+uint8_t servonum2 =15;
+uint8_t servonum3 = 14; 
+uint8_t servonum4 = 12; 
+uint8_t servonum5 = 11; 
+uint8_t servonum6 = 8; 
+// uint8_t servonum1 = 6;
+// uint8_t servonum2 =14;
+// uint8_t servonum3 = 13; 
+// uint8_t servonum4 = 11; 
+// uint8_t servonum5 = 10; 
+// uint8_t servonum6 = 8; 
+
+//gripper
 
 float Pi = 3.14;     // π取值
 float L0 = 60 + 30;  // 30为机械臂底部圆盘距离检测边缘距离，根据实际调整,60为圆盘底座固定值。
@@ -102,9 +110,11 @@ void Inverse_kinematics(double X_EE, double Y_EE, double Z_EE) {  // 机械臂�
   }
 }
 
-
+bool isStart = false;
 void setup() {
+
   Serial.begin(9600);
+  isStart = false;
   Serial.println("Servo kontrol test!");
   pinMode(RELAY_PIN, OUTPUT); 
   digitalWrite(RELAY_PIN,1);
@@ -115,31 +125,34 @@ void setup() {
 }
 
 // Kameranın Koordinat Sınırları
-const int x_camera_min = 0;
-const int y_camera_min = 0;
-const int x_camera_max = 640;
-const int y_camera_max = 480;
+const int x_camera_min = 260;
+const int y_camera_min = 80;
+const int x_camera_max = 540;
+const int y_camera_max = 260;
 
 
 // Robot Kolunun Çalışma Alanı Koordinatları
 const float robot_X_min = 0;
 const float robot_X_max = 270;
-const float robot_Y_min = 260;
+const float robot_Y_min = 0;
 const float robot_Y_max = 350;
 
-uint8_t currentTheta_1=90;
-uint8_t currentTheta_2=90;
-uint8_t currentTheta_3=90;
-uint8_t currentTheta_4=90;
-uint8_t currentTheta_5=90;
+int currentTheta_1 = 180;
+int currentTheta_2 = 120;
+int currentTheta_3 = 70;
+int currentTheta_4 = 30;
+int currentTheta_5 = 90;
 
 // Global değişkenler
-int x_robot = 200;
-int y_robot = 200;
-bool obj_type =0;
+int x_robot = 260;
+int y_robot = 260;
+bool obj_type =-1;
+bool pickObj = false;
+float previousX = 0, previousY = 0; // Önceki koordinatları sakla
+float tolerance = 5.0; // Tolerans değeri (örneğin 10 birim)
 
 void parseData(String data) {
-  // Veriyi virgül ile parçala
+  Serial.print(data);
   int commaIndex1 = data.indexOf(',');
   int commaIndex2 = data.indexOf(',', commaIndex1 + 1);
   int commaIndex3 = data.indexOf(',', commaIndex2 + 1);
@@ -150,15 +163,19 @@ void parseData(String data) {
     float obj_Y_min = data.substring(commaIndex1 + 1, commaIndex2).toFloat();
     float obj_X_max = data.substring(commaIndex2 + 1, commaIndex3).toFloat();
     float obj_Y_max = data.substring(commaIndex3 + 1, commaIndex4).toFloat();
-    bool obj_type = (data.substring(commaIndex4 + 1).toInt() == 1); // "1" -> Spoon, "0" -> Fork
+    obj_type = (data.substring(commaIndex4 + 1).toInt() == 1); // "1" -> Spoon, "0" -> Fork
 
     // Nesnenin merkez koordinatlarını hesapla
     float obj_corX = (obj_X_min + obj_X_max) / 2.0;
     float obj_corY = (obj_Y_min + obj_Y_max) / 2.0;
 
-    // Robot koordinatlarını hesapla
+    Serial.print("aklınala oynamaya geldim");
     x_robot = robot_X_min + (obj_corX - x_camera_min) * (robot_X_max - robot_X_min) / (x_camera_max - x_camera_min);
     y_robot = robot_Y_min + (obj_corY - y_camera_min) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min);
+
+   
+
+    pickObj= false;
 
     // Bilgiyi yazdır
     Serial.print("Robot X: ");
@@ -168,8 +185,11 @@ void parseData(String data) {
     Serial.print(", Object Type: ");
     Serial.println(obj_type ? "Spoon" : "Fork");
   } else {
+    Serial.println("data");
     Serial.println("Invalid data received");
+    pickObj= true;
   }
+  
 }
 
 
@@ -191,124 +211,140 @@ void smoothMove(uint8_t servo, uint8_t startAngle, uint8_t targetAngle, int step
     }
   }
 }
+void moveToPosition(bool act, int x, int y, int z, float tet1 = -1, float tet2 = -1, float tet3 = -1, float tet4 = -1, bool slow = false, int dtime=50) {
+  // Ters kinematik hesaplaması
+  Inverse_kinematics(x, y, z);
 
-void moveToPosition(bool act, int x, int y, int z, float tet1, float tet2, float tet3, float tet4){
+  // Servo motor açılarını kısıtlayarak güncelliyoruz
 
+  // Servo motor açılarını kısıtlayarak güncelliyoruz
+  float calculatedTheta_1 = constrain(Theta_1, 0, 180);
+  float calculatedTheta_2 = constrain(Theta_2, 0, 172);
+  float calculatedTheta_3 = constrain(Theta_3, 0, 178);
+  float calculatedTheta_4 = constrain(Theta_4, 20, 170);
 
-  Inverse_kinematics(x, y, z); 
-  // Servo motorlarına açıları ayarlıyoruz
-  Theta_1 = constrain(Theta_1, 0, 180);
-  Theta_2 = constrain(Theta_2, 0, 172);
-  Theta_3 = constrain(Theta_3, 0, 178);
-  Theta_4 = constrain(Theta_4, 20, 170);
-
-
-  setServoAngle(servonum1, Theta_1);
-  delay(200);
-  setServoAngle(servonum2, Theta_2);
-  delay(200);
-  setServoAngle(servonum3, 180 - Theta_3);  // Theta_3'ün tersini alıyoruz çünkü bu açı ters hesaplanabilir
-  delay(200);
-  setServoAngle(servonum4, Theta_4);
-  delay(200);
-  setServoAngle(servonum5, 90);  // 90 derecelik bir sabit değerle servoyu ayarlıyoruz
-  delay(200);
-
-  // Röle durumu ayarlama
-  digitalWrite(RELAY_PIN, act);  // Röleyi açmak/kapatmak için 'act' parametresi kullanılır
-}
-void moveToPositionSlowly(bool act, int x, int y, int z, float tet1, float tet2, float tet3, float tet4){
+  // Kullanıcı tarafından sağlanan açılar varsa, yoksa ters kinematikten gelen açılar kullanılacak
+  float targetTheta_1 = (tet1 >= 0) ? constrain(tet1, 0, 180) : calculatedTheta_1;
+  float targetTheta_2 = (tet2 >= 0) ? constrain(tet2, 0, 172) : calculatedTheta_2;
+  float targetTheta_3 = (tet3 >= 0) ? constrain(tet3, 0, 178) : calculatedTheta_3;
+  float targetTheta_4 = (tet4 >= 0) ? constrain(tet4, 20, 170) : calculatedTheta_4;
 
 
-  
-  Inverse_kinematics(x, y, z); 
-  // Servo motorlarına açıları ayarlıyoruz
-  Theta_1 = constrain(Theta_1, 0, 180);
-  Theta_2 = constrain(Theta_2, 0, 172);
-  Theta_3 = constrain(Theta_3, 0, 178);
-  Theta_4 = constrain(Theta_4, 20, 170);
+  if (slow) {
+    smoothMove(servonum2, currentTheta_2, targetTheta_2, dtime);
+    currentTheta_2 = targetTheta_2;
+    delay(100);
+    smoothMove(servonum3, currentTheta_3, 180 - targetTheta_3, dtime);
+    currentTheta_3 = 180-targetTheta_3;
+    delay(100);
+    smoothMove(servonum4, currentTheta_4, targetTheta_4, dtime);
+    currentTheta_4 = targetTheta_4;
+    delay(100);
+    smoothMove(servonum1, currentTheta_1, targetTheta_1, dtime);
+    currentTheta_1 = targetTheta_1;
+    
+    delay(1000);
+    digitalWrite(RELAY_PIN,act);
+    delay(1000);
+  } else {
+    // Hızlı hareket için servo motor açılarını hemen ayarla
+    setServoAngle(servonum1, targetTheta_1);
+    currentTheta_1 = targetTheta_1;
+    delay(100);
+    setServoAngle(servonum2, targetTheta_2);
+    currentTheta_2 = targetTheta_2;
+    delay(100);
+    setServoAngle(servonum3, 180 - targetTheta_3);
+    currentTheta_3 = 180-targetTheta_3;
+    delay(100);  // Theta_3'ün tersini alıyoruz
+    setServoAngle(servonum4, targetTheta_4);
+    currentTheta_4 = targetTheta_4;
+    delay(1000);
+    digitalWrite(RELAY_PIN,act);
+    delay(1000);
 
-  smoothMove(servonum1, currentTheta_1, Theta_1, 100);
-  delay(100);
-  smoothMove(servonum2, currentTheta_2, Theta_2, 100);
-  delay(100);
-  smoothMove(servonum3, currentTheta_3, 180 - Theta_3, 100);
-  delay(100);  
-  smoothMove(servonum4, currentTheta_4, Theta_4,100 );
-  delay(100);
-  smoothMove(servonum5, currentTheta_5, 90,100 );
-  digitalWrite(RELAY_PIN,act);
-  currentTheta_1=Theta_1;
-  currentTheta_2=Theta_2;
-  currentTheta_3=Theta_3;
-  currentTheta_4=Theta_4;
-  currentTheta_5=90;
-
-}
-
-
-
-void go_obj() {
-  Serial.println("obje tespit edildiği objeye gidiliyor");
-  moveToPositionSlowly(1, x_robot, y_robot, 180, Theta_1,Theta_2, 40, Theta_4);
-  Serial.println("mıknatıs aktiflestiriliyor");
-  delay(5000);
-  moveToPositionSlowly(0, x_robot, y_robot, 150, Theta_1,Theta_2, Theta_3, 0);
-  delay(5000);
-
-
-  if (obj_type == 0) {  // Fork
-    Serial.println("Robot kasıgı çöpe atmaya gidiyor");
-    moveToPositionSlowly(0, -200,200, 250, Theta_1,Theta_2, Theta_3, Theta_4);
-   
-  } 
-  else {  
-    Serial.println("Robot çatalı çöpe atmaya gidiyor");// Spoon
-    moveToPositionSlowly(0, -260, 60, 250, Theta_1,Theta_2, Theta_3, Theta_4);
-  
   }
+
+  
+
+}
+bool isGoObjAllowed = true;
+void go_obj() {
+
+    Serial.println("Obje tespit edildi, objeye gidiliyor...");
+    moveToPosition(true,x_robot, y_robot, 150, -1, 120, 90, -1, true, 10);
+    delay(10);
+    Serial.println("Mıknatıs aktifleştiriliyor...");
+    moveToPosition(true,x_robot, y_robot, 200, -1, -1, -1, 5, true, 10);
+    delay(10); 
+    moveToPosition(true,x_robot, y_robot, 140, -1, -1, -1, 5, true, 10);
+
+    if (obj_type == 0) {  // Çatal
+        Serial.println("Robot çatalı çöpe atmaya gidiyor...");
+        moveToPosition(true, -210, 230, 250, -1, 120, 90, 90, true, 40);
+        moveToPosition(false, -210, 230, 250, -1, 80, 90, 90, true, 40);
+        delay(1000);
+
+    } else if (obj_type == 1) {  // Kaşık
+        Serial.println("Robot kaşığı çöpe atmaya gidiyor...");
+        moveToPosition(true, -260, 60, 250, -1, 120, 90, 80, true, 40);
+        moveToPosition(false, -260, 60, 250, -1, 80, 90, 80, true, 40);
+        delay(1000);
+    } else {
+        Serial.println("Hata: Obje tipi tanımlanamıyor!");
+    }
+
+    Serial.println("Mıknatıs kapatılıyor...");
+    
 }
 
 
 void go_home() {
-  Serial.println("robot eve gidiyor");
-  moveToPosition(0, -200, 0, 200,  Theta_1,Theta_2, Theta_3, Theta_4);
-  currentTheta_1=Theta_1;
-  currentTheta_2=Theta_2;
-  currentTheta_3=Theta_3;
-  currentTheta_4=Theta_4;
-  currentTheta_5=90;
+  Serial.println("Robot eve gidiyor...");
+  moveToPosition(0, 0, 0,0, 180, 120, 80, 10, true);  // Home pozisyonu için sabit açı değerleri
+ // Robotun ev pozisyonuna gitmesi için hareket
 }
 
-
-
-
-
+bool isMoved=false;
 void loop() {
-  go_home();
-  delay(5000);
-  go_obj();
-  delay(5000);
-  // if (Serial.available() == 0) {
-  //   String data = Serial.readStringUntil('\n'); // Gelen veriyi oku
-  //   parseData(data); 
-  //   go_obj();// Gelen koordinat verilerini işle ve değişkenlere ata
-  //  // Koordinatlar varsa nesneyi işlemek için robotu yönlendir
-  // } else {
-  //   delay(5000);
-  //   go_home();
-  //    // Koordinat yoksa robot "home" pozisyonunda bekler
-  // }
+  
 
+  if (Serial.available() > 0) {
+    String data = Serial.readStringUntil('\n');
+    parseData(data);
+    if(!pickObj){
+      Serial.print("Alınan veri: ");
+      Serial.println(data);
+      go_obj();
+      isMoved=true;
+  }}
+    else{
+      go_home();
+  }
+  if(isMoved){
+
+    go_home();
+    isMoved=false;
+    delay(1000);
+  }
+  delay(1000);
+
+
+  // Debug verileri yazdır
   #ifdef DEBUG
   Serial.print(" Servo: ");
   Serial.print(Theta_1);
   Serial.print("\t");
   Serial.print(Theta_2);
   Serial.print("\t");
-  Serial.print(Theta_3);
+  Serial.print(180 - Theta_3);
   Serial.print("\t");
   Serial.println(Theta_4);
   #endif
-
 }
+
+
+// Hareket tamamlandığında bu fonksiyon çağrılabilir
+
+
+

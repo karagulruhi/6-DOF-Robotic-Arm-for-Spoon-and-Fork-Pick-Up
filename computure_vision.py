@@ -9,13 +9,13 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 # Attempt to establish a connection with the Arduino
-try:
-    arduino = serial.Serial('/dev/ttyUSB0', 9600)  # Port and baud rate
-    arduino_connected = True
-except serial.SerialException:
-    print("Arduino not connected. Default value '0' will be used.")
-    arduino = None
-    arduino_connected = False
+def initialize_arduino():
+    try:
+        arduino = serial.Serial('/dev/ttyUSB0', 9600)  # Port and baud rate
+        return arduino, True
+    except serial.SerialException:
+        print("Arduino not connected. Default value '0' will be used.")
+        return None, False
 
 # Load the YOLOv5-Tiny model
 model = torch.hub.load("ultralytics/yolov5", "custom", path="best.pt")
@@ -31,8 +31,11 @@ picam2.start()
 
 # Define relevant classes and ROI coordinates
 relevant_classes = ['fork', 'spoon']
-region_x_min, region_y_min = 340, 60
-region_x_max, region_y_max = 600, 300
+region_x_min, region_y_min = 260, 80
+region_x_max, region_y_max = 540, 260
+
+# Initialize Arduino
+arduino, arduino_connected = initialize_arduino()
 
 while True:
     # Capture a frame from the camera
@@ -47,6 +50,7 @@ while True:
     coords = "0\n"  # If no objects are detected or Arduino is not connected
 
     for det in detections:
+        print(det)
         xmin, ymin, xmax, ymax, conf, class_id = det
         if (
             xmin >= region_x_min and ymin >= region_y_min and
@@ -65,9 +69,13 @@ while True:
 
     # Send data to Arduino if connected
     if arduino_connected:
-        arduino.write(coords.encode())
-        print(f"Arduino qSent value: {coords.strip()}")
-        time.sleep(0.1)  # Small delay between transmissions
+        try:
+            arduino.write(coords.encode())
+            print(f"Arduino Sent value: {coords.strip()}")
+            time.sleep(5)  # Small delay between transmissions
+        except serial.SerialException:
+            print("Error sending data to Arduino. Reinitializing connection.")
+            arduino, arduino_connected = initialize_arduino()
     else:
         print(f"Arduino not connected. Sent value: {coords.strip()}")
 
