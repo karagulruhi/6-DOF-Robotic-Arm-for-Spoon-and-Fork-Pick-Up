@@ -226,6 +226,7 @@ void go_obj() {
   delay(1000);
   Serial.println("Mıknatıs aktifleştirildi.");
 
+<<<<<<< HEAD
   // 3. Çöp kutusuna taşı
   if (obj_type == 0) { // Çatal
     moveToPosition(true, -140, 270, 200, -1, 120, -1, 30, true, 40);
@@ -240,11 +241,40 @@ void go_obj() {
   // 4. Eve dön
   go_home();
   Serial.println("READY");
+=======
+
+    Serial.println("Obje tespit edildi, objeye gidiliyor...");
+    moveToPosition(true,x_robot, y_robot, 200, -1, 120, 90, -1, true, 10);
+    delay(10);
+    Serial.println("Mıknatıs aktifleştiriliyor...");
+    moveToPosition(true,x_robot, y_robot, 200, -1, -1, -1, 5, true, 10);
+    delay(10); 
+    moveToPosition(true,x_robot, y_robot, 140, -1, -1, -1, 5, true, 10);
+
+    if (obj_type == 0) {  // Çatal
+        Serial.println("Robot çatalı çöpe atmaya gidiyor...");
+        moveToPosition(true, -150, 230, 250, -1, 120, 90, 90, true, 40);
+        moveToPosition(false, -150, 230, 250, -1, 80, 90, 90, true, 40);
+        delay(1000);
+
+    } else if (obj_type == 1) {  // Kaşık
+        Serial.println("Robot kaşığı çöpe atmaya gidiyor...");
+        moveToPosition(true, -170, 60, 250, -1, 120, 90, 80, true, 40);
+        moveToPosition(false, -170, 60, 250, -1, 80, 90, 80, true, 40);
+        delay(1000);
+    } else {
+        Serial.println("Hata: Obje tipi tanımlanamıyor!");
+    }
+
+    Serial.println("Mıknatıs kapatılıyor...");
+    
+>>>>>>> ada0e95f369c21944671615f98c7c2b624a3c8c0
 }
 
 
 void go_home() {
   Serial.println("Robot eve gidiyor...");
+<<<<<<< HEAD
   moveToPosition(false, 0, 0,0, 180, 120, 80, 5, true);  // Home pozisyonu için sabit açı değerleri
  // Robotun ev pozisyonuna gitmesi için hareket
 }
@@ -255,6 +285,18 @@ void parseData(String data) {
   Serial.println(data);
   Serial.println("PROCESSING_START"); 
 
+=======
+  moveToPosition(0, 0, 0,0, 180, 120, 80, 5, true);  // Home pozisyonu için sabit açı değerleri
+ // Robotun ev pozisyonuna gitmesi için hareket
+}
+
+
+void parseData(String data) {
+  Serial.print("Alınan veri: ");
+  Serial.println(data);
+  
+
+>>>>>>> ada0e95f369c21944671615f98c7c2b624a3c8c0
   int commaIndex1 = data.indexOf(',');
   int commaIndex2 = data.indexOf(',', commaIndex1 + 1);
   int commaIndex3 = data.indexOf(',', commaIndex2 + 1);
@@ -275,6 +317,7 @@ void parseData(String data) {
 
     // Kameradan gelen koordinatları robot koordinatlarına dönüştür
     x_robot = robot_X_min + (obj_corX - x_camera_min) * (robot_X_max - robot_X_min) / (x_camera_max - x_camera_min);
+<<<<<<< HEAD
     y_robot = robot_Y_min + (y_camera_max - obj_corY) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min);
     x_robot= x_robot+52;
     y_robot=y_robot-10;
@@ -285,11 +328,15 @@ void parseData(String data) {
     
 
 
+=======
+    y_robot = robot_Y_min + (obj_corY - y_camera_min) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min);
+>>>>>>> ada0e95f369c21944671615f98c7c2b624a3c8c0
     pickObj = false;
     
   } else {
     Serial.println("Hatalı veri formatı! Beklenen format: xmin,ymin,xmax,ymax,object_type");
     pickObj = true;
+<<<<<<< HEAD
     Serial.println("READY");
   }
 }
@@ -329,3 +376,48 @@ void loop() {
 }
 
 // Hareket tamamlandığında bu fonksiyon çağrılabilir
+=======
+  }
+}
+
+
+
+
+String lastDetectedObject = "";
+bool isMoved = false;
+
+void loop() {
+  if (Serial.available() > 0) {
+    String data = Serial.readStringUntil('\n');
+    parseData(data);
+    
+    if (!pickObj) {
+      Serial.println("PROCESSING_START"); // İşlem başlangıç sinyali
+      go_obj();
+      isMoved = true;
+    }
+  }else{go_home();}
+
+  if (isMoved) {
+    go_home();
+    isMoved = false;
+    Serial.println("READY"); // Hazır olduğunu bildir
+    delay(1000);
+  }
+
+
+  // Debug verileri yazdır
+  #ifdef DEBUG
+  Serial.print(" Servo: ");
+  Serial.print(Theta_1);
+  Serial.print("\t");
+  Serial.print(Theta_2);
+  Serial.print("\t");
+  Serial.print(180 - Theta_3);
+  Serial.print("\t");
+  Serial.println(Theta_4);
+  #endif
+}
+
+// Hareket tamamlandığında bu fonksiyon çağrılabilir
+>>>>>>> ada0e95f369c21944671615f98c7c2b624a3c8c0
