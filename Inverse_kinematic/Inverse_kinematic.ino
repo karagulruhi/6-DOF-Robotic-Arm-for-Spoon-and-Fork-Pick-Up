@@ -115,10 +115,11 @@ void setup() {
 }
 
 // Kameranın Koordinat Sınırları
-const int x_camera_min = 0;
-const int y_camera_min = 0;
-const int x_camera_max = 640;
-const int y_camera_max = 480;
+
+const int x_camera_min = 260;
+const int y_camera_min = 80;
+const int x_camera_max = 540;
+const int y_camera_max = 260;
 
 
 // Robot Kolunun Çalışma Alanı Koordinatları
@@ -134,8 +135,8 @@ uint8_t currentTheta_4=90;
 uint8_t currentTheta_5=90;
 
 // Global değişkenler
-int x_robot = 200;
-int y_robot = 200;
+int x_robot = 168;
+int y_robot = 230;
 bool obj_type =0;
 
 void parseData(String data) {
@@ -158,7 +159,7 @@ void parseData(String data) {
 
     // Robot koordinatlarını hesapla
     x_robot = robot_X_min + (obj_corX - x_camera_min) * (robot_X_max - robot_X_min) / (x_camera_max - x_camera_min);
-    y_robot = robot_Y_min + (obj_corY - y_camera_min) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min);
+    y_robot = robot_Y_min + (y_camera_max - obj_corY) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min); 
 
     // Bilgiyi yazdır
     Serial.print("Robot X: ");
@@ -250,7 +251,7 @@ void moveToPositionSlowly(bool act, int x, int y, int z, float tet1, float tet2,
 
 void go_obj() {
   Serial.println("obje tespit edildiği objeye gidiliyor");
-  moveToPositionSlowly(1, x_robot, y_robot, 180, Theta_1,Theta_2, 40, Theta_4);
+  moveToPositionSlowly(1, x_robot, y_robot, 180, Theta_1,Theta_2, 40, 0);
   Serial.println("mıknatıs aktiflestiriliyor");
   delay(5000);
   moveToPositionSlowly(0, x_robot, y_robot, 150, Theta_1,Theta_2, Theta_3, 0);
@@ -288,7 +289,7 @@ void loop() {
   go_home();
   delay(5000);
   go_obj();
-  delay(5000);
+ 
   // if (Serial.available() == 0) {
   //   String data = Serial.readStringUntil('\n'); // Gelen veriyi oku
   //   parseData(data); 
