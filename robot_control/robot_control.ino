@@ -1,110 +1,142 @@
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
-// PWM sürücüsünü oluştur
+
+// Create the PWM driver
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 
-#define SERVOMIN  150 // Minimum darbe genişliği (out of 4096)
-#define SERVOMAX  600 // Maksimum darbe genişliği (out of 4096)
-#define SERVO_FREQ 60
+#define SERVOMIN  150 // Minimum pulse width (out of 4096)
+#define SERVOMAX  600 // Maximum pulse width (out of 4096)
+#define SERVO_FREQ 60 // Servo frequency, analog servos run at ~50 Hz
 
-#define RELAY_PIN 7 
-  // Analog servolar ~50 Hz'de çalışır
+#define RELAY_PIN 7
 
 uint8_t servonum1 = 9;
-uint8_t servonum2 =15;
-uint8_t servonum3 = 14; 
-uint8_t servonum4 = 12; 
-uint8_t servonum5 = 11; 
-uint8_t servonum6 = 8; 
-// uint8_t servonum1 = 6;
-// uint8_t servonum2 =14;
-// uint8_t servonum3 = 13; 
-// uint8_t servonum4 = 11; 
-// uint8_t servonum5 = 10; 
-// uint8_t servonum6 = 8; 
+uint8_t servonum2 = 15;
+uint8_t servonum3 = 14;
+uint8_t servonum4 = 12;
+uint8_t servonum5 = 11;
+uint8_t servonum6 = 8;
 
-//gripper
+uint8_t servonum1 = 9;   // Base rotation
+uint8_t servonum2 = 15;  // Shoulder joint
+uint8_t servonum3 = 14;  // Elbow joint
+uint8_t servonum4 = 12;  // Wrist joint
+uint8_t servonum5 = 11;  // Gripper rotation
+uint8_t servonum6 = 8;   // Gripper open/close
 
-float Pi = 3.14;     // π取值
-float L0 = 60 + 15;  // 30为机械臂底部圆盘距离检测边缘距离，根据实际调整,60为圆盘底座固定值。
-float L1 = 72;       // 抓取物体表面到第二关节位置高度  unit:mm     72为默认高度
-float L2 = 105;      // 第2个关节到第3个关节长度
-float L3 = 128;      // 第3关节到第4关节的长度  145
-float L4 = 180;      // 第4个关节到手臂尖端的长度（夹具）,包含手爪旋转舵机180
+// Mechanical arm parameters (mm)
+const float L0 = 75;   // Base height (from surface to joint 2)
+const float L1 = 72;   // Shoulder to elbow length
+const float L2 = 105;  // Elbow to wrist length
+const float L3 = 128;  // Wrist to gripper length
 
-float X_EE, Y_EE, Z_EE;  // 手爪的x轴坐标-左右旋转,y轴坐标-前后伸展,z轴坐标-高度
+// Coordinate system parameters
+const int CAMERA_WIDTH = 640;
+const int CAMERA_HEIGHT = 480;
+const int ROI_X_MIN = 280;  // Region of Interest coordinates
+const int ROI_Y_MIN = 0;
+const int ROI_X_MAX = 560;
+const int ROI_Y_MAX = 200;
+
+// Robot workspace boundaries (mm)
+const float ROBOT_X_MIN = 30;
+const float ROBOT_X_MAX = 200;
+const float ROBOT_Y_MIN = 30;
+const float ROBOT_Y_MAX = 220;
+
+// Global variables for arm control
+int currentTheta_1 = 180;  // Current joint angles
+int currentTheta_2 = 120;
+int currentTheta_3 = 70;
+int currentTheta_4 = 30;
+int x_robot, y_robot;      // Target coordinates
+bool object_type = -1;     // 0 = fork, 1 = spoon
+bool processing_flag = false;
+
+// Gripper
+float Pi = 3.14;    
+float L0 = 60 + 15; // Base height
+float L1 = 72;      // Link 1 length
+float L2 = 105;     // Link 2 length
+float L3 = 128;     // Link 3 length
+float L4 = 180;     // Gripper length
+
+float X_EE, Y_EE, Z_EE; // End effector position
 float Zoffset, D, d, R;
 float alpha1, alpha2, alpha3;
 float Theta_1, Theta_2, Theta_3, Theta_4;
-void Inverse_kinematics(double X_EE, double Y_EE, double Z_EE) {  // 机械臂逆运动学，给定X(左右),Y（前后）,Z（高度）坐标
+
+// Inverse Kinematics function
+// Reference: https://github.com/wsurging/Alone-Kit/blob/main/5DOF_ARM_KIT_TANDEM_TYPE/2.Robotic%20ARM%20Position%20Control/5_6DOF_Arm_PositionControl/5_6DOF_Arm_PositionControl.ino
+void Inverse_kinematics(double X_EE, double Y_EE, double Z_EE) {  
   D = sqrt(pow(X_EE, 2) + pow(Y_EE, 2));
   if ((D > L4 + L0 || D < L4 + L0) && Z_EE > (L1 + L2 - L4)) {
     if (X_EE > 0 && Z_EE >= L1) {
-      Theta_1 = (atan(Y_EE / X_EE)) * (180.00 / Pi);  //theta 1
+      Theta_1 = (atan(Y_EE / X_EE)) * (180.00 / Pi);  // Theta 1
       d = D - L4;
       Zoffset = Z_EE - L1;
       R = sqrt(pow(d, 2) + pow(Zoffset, 2));
       alpha1 = (acos(d / R)) * (180.00 / Pi);
       alpha2 = (acos((pow(L2, 2) + pow(R, 2) - pow(L3, 2)) / (2 * L2 * R))) * (180.00 / Pi);
-      Theta_2 = (alpha1 + alpha2);                                                                //theta 2
-      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  //theta 3
-      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) - alpha1);                                 //alpha 3
-      Theta_4 = 180 + 90 - alpha3;                                                                //theta 4
+      Theta_2 = (alpha1 + alpha2);                                                                // Theta 2
+      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  // Theta 3
+      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) - alpha1);                                 // Alpha 3
+      Theta_4 = 180 + 90 - alpha3;                                                                // Theta 4
     } else if (X_EE > 0 && Z_EE <= L1) {
-      Theta_1 = (atan(Y_EE / X_EE)) * (180.00 / Pi);  //theta 1
+      Theta_1 = (atan(Y_EE / X_EE)) * (180.00 / Pi);  // Theta 1
       d = D - L4;
       Zoffset = Z_EE - L1;
       R = sqrt(pow(d, 2) + pow(Zoffset, 2));
       alpha1 = (acos(d / R)) * (180.00 / Pi);
       alpha2 = (acos((pow(L2, 2) + pow(R, 2) - pow(L3, 2)) / (2 * L2 * R))) * (180.00 / Pi);
-      Theta_2 = (alpha2 - alpha1);                                                                //theta 2
-      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  //theta 3
-      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) + alpha1);                                 //alpha 3
-      Theta_4 = 180 + 90 - alpha3;                                                                //theta 4
+      Theta_2 = (alpha2 - alpha1);                                                                // Theta 2
+      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  // Theta 3
+      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) + alpha1);                                 // Alpha 3
+      Theta_4 = 180 + 90 - alpha3;                                                                // Theta 4
     } else if (X_EE == 0 && Z_EE >= L1) {
-      Theta_1 = 90.00;  //theta 1
+      Theta_1 = 90.00;  // Theta 1
       d = D - L4;
       Zoffset = Z_EE - L1;
       R = sqrt(pow(d, 2) + pow(Zoffset, 2));
       alpha1 = (acos(d / R)) * (180.00 / Pi);
       alpha2 = (acos((pow(L2, 2) + pow(R, 2) - pow(L3, 2)) / (2 * L2 * R))) * (180.00 / Pi);
-      Theta_2 = alpha1 + alpha2;                                                                  //theta 2
-      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  //theta 3
-      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) - alpha1);                                 //alpha 3
-      Theta_4 = 180 + 90 - alpha3;                                                                //theta 4
+      Theta_2 = alpha1 + alpha2;                                                                  // Theta 2
+      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  // Theta 3
+      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) - alpha1);                                 // Alpha 3
+      Theta_4 = 180 + 90 - alpha3;                                                                // Theta 4
     } else if (X_EE == 0 && Z_EE <= L1) {
-      Theta_1 = 90.00;  //theta 1
+      Theta_1 = 90.00;  // Theta 1
       d = D - L4;
       Zoffset = Z_EE - L1;
       R = sqrt(pow(d, 2) + pow(Zoffset, 2));
       alpha1 = (acos(d / R)) * (180.00 / Pi);
       alpha2 = (acos((pow(L2, 2) + pow(R, 2) - pow(L3, 2)) / (2 * L2 * R))) * (180.00 / Pi);
-      Theta_2 = (alpha2 - alpha1);                                                                //theta 2
-      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  //theta 3
-      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) + alpha1);                                 //alpha 3
-      Theta_4 = 180 + 90 - alpha3;                                                                //theta 4
+      Theta_2 = (alpha2 - alpha1);                                                                // Theta 2
+      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  // Theta 3
+      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) + alpha1);                                 // Alpha 3
+      Theta_4 = 180 + 90 - alpha3;                                                                // Theta 4
     } else if (X_EE < 0 && Z_EE >= L1) {
-      Theta_1 = 90.00 + (90.00 - abs((atan(Y_EE / X_EE)) * (180.00 / Pi)));  //theta 1
+      Theta_1 = 90.00 + (90.00 - abs((atan(Y_EE / X_EE)) * (180.00 / Pi)));  // Theta 1
       d = D - L4;
       Zoffset = Z_EE - L1;
       R = sqrt(pow(d, 2) + pow(Zoffset, 2));
       alpha1 = (acos(d / R)) * (180.00 / Pi);
       alpha2 = (acos((pow(L2, 2) + pow(R, 2) - pow(L3, 2)) / (2 * L2 * R))) * (180.00 / Pi);
-      Theta_2 = (alpha1 + alpha2);                                                                //theta 2
-      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  //theta 3
-      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) - alpha1);                                 //alpha 3
-      Theta_4 = 180 + 90 - alpha3;                                                                //theta 4
+      Theta_2 = (alpha1 + alpha2);                                                                // Theta 2
+      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  // Theta 3
+      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) - alpha1);                                 // Alpha 3
+      Theta_4 = 180 + 90 - alpha3;                                                                // Theta 4
     } else if (X_EE < 0 && Z_EE <= L1) {
-      Theta_1 = 90.00 + (90.00 - abs((atan(Y_EE / X_EE)) * (180.00 / Pi)));  //theta 1
+      Theta_1 = 90.00 + (90.00 - abs((atan(Y_EE / X_EE)) * (180.00 / Pi)));  // Theta 1
       d = D - L4;
       Zoffset = Z_EE - L1;
       R = sqrt(pow(d, 2) + pow(Zoffset, 2));
       alpha1 = (acos(d / R)) * (180.00 / Pi);
       alpha2 = (acos((pow(L2, 2) + pow(R, 2) - pow(L3, 2)) / (2 * L2 * R))) * (180.00 / Pi);
-      Theta_2 = (alpha2 - alpha1);                                                                //theta 2
-      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  //theta 3
-      alpha3 = 180.00 - ((180.00 - alpha2 - Theta_3) + alpha1);                                   //alpha 3
-      Theta_4 = 180 + 90 - alpha3;                                                                //theta 4
+      Theta_2 = (alpha2 - alpha1);                                                                // Theta 2
+      Theta_3 = ((acos((pow(L2, 2) + pow(L3, 2) - pow(R, 2)) / (2 * L2 * L3))) * (180.00 / Pi));  // Theta 3
+      alpha3 = 180.00 - ((180.00 - (alpha2 + Theta_3)) + alpha1);                                 // Alpha 3
+      Theta_4 = 180 + 90 - alpha3;                                                                // Theta 4
     }
   }
 }
@@ -123,54 +155,21 @@ void setup() {
   go_home();
 }
 
-// Kameranın Koordinat Sınırları
-const int x_camera_min = 0;
-const int y_camera_min = 0;
-const int x_camera_max = 640;
-const int y_camera_max = 480;
 
-const int x_roi_min = 280;
-const int y_roi_min = 0;
-const int x_roi_max = 560;
-const int y_roi_max = 200;
-// Robot Kolunun Çalışma Alanı Koordinatları
-const float robot_X_min = 30;
-const float robot_X_max = 200;
-const float robot_Y_min = 30;
-const float robot_Y_max = 220;
-
-int currentTheta_1 = 180;
-int currentTheta_2 = 120;
-int currentTheta_3 = 70;
-int currentTheta_4 = 30;
-int currentTheta_5 = 90;
-
-int x_robot;
-int y_robot;
-bool obj_type =-1;
-bool pickObj = false;
-
-float mapCameraToRobotX(int y_camera) {
-    // Kamera Y'yi ROI y_roi_min/y_roi_max arasına kısıtla
-    y_camera = max(y_roi_min, min(y_camera, y_roi_max));
-    
-    // Oranı hesapla (ters çevirme yapılmıyor, direkt lineer)
-    float y_ratio = (float)(y_camera - y_roi_min) / (y_roi_max - y_roi_min);
-    
-    // Robot X'i hesapla
-    return robot_X_min + y_ratio * (robot_X_max - robot_X_min);
+float mapCameraToRobotX(int cameraY) {
+  /* Maps vertical camera coordinate to robot X-axis
+     Linear mapping from [ROI_Y_MIN, ROI_Y_MAX] to [ROBOT_X_MIN, ROBOT_X_MAX] */
+  cameraY = constrain(cameraY, ROI_Y_MIN, ROI_Y_MAX);
+  float ratio = (float)(cameraY - ROI_Y_MIN) / (ROI_Y_MAX - ROI_Y_MIN);
+  return ROBOT_X_MIN + ratio * (ROBOT_X_MAX - ROBOT_X_MIN);
 }
 
-// Kamera X → Robot Y
-float mapCameraToRobotY(int x_camera) {
-    // Kamera X'i ROI sınırlarına kısıtla
-    x_camera = max(x_roi_min, min(x_camera, x_roi_max));
-    
-    // Oranı hesapla (Ters çevirme YAPILMADI)
-    float x_ratio = (float)(x_camera - x_roi_min) / (x_roi_max - x_roi_min); // Düzeltme burada!
-    
-    // Robot Y'yi hesapla
-    return robot_Y_min + x_ratio * (robot_Y_max - robot_Y_min);
+float mapCameraToRobotY(int cameraX) {
+  /* Maps horizontal camera coordinate to robot Y-axis
+     Linear mapping from [ROI_X_MIN, ROI_X_MAX] to [ROBOT_Y_MIN, ROBOT_Y_MAX] */
+  cameraX = constrain(cameraX, ROI_X_MIN, ROI_X_MAX);
+  float ratio = (float)(cameraX - ROI_X_MIN) / (ROI_X_MAX - ROI_X_MIN);
+  return ROBOT_Y_MIN + ratio * (ROBOT_Y_MAX - ROBOT_Y_MIN);
 }
 
 void parseData(String data) {
@@ -279,11 +278,7 @@ void moveToPosition(bool act, int x, int y, int z, float tet1 = -1, float tet2 =
  
 
   }
-
-  
-
 }
-
 
 
 
@@ -335,8 +330,6 @@ void loop() {
     }
   }
   
-
-
 
 
 
