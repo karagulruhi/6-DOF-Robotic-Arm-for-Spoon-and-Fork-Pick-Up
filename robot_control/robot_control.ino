@@ -26,7 +26,7 @@ uint8_t servonum6 = 8;
 //gripper
 
 float Pi = 3.14;     // π取值
-float L0 = 60 + 30;  // 30为机械臂底部圆盘距离检测边缘距离，根据实际调整,60为圆盘底座固定值。
+float L0 = 60 + 15;  // 30为机械臂底部圆盘距离检测边缘距离，根据实际调整,60为圆盘底座固定值。
 float L1 = 72;       // 抓取物体表面到第二关节位置高度  unit:mm     72为默认高度
 float L2 = 105;      // 第2个关节到第3个关节长度
 float L3 = 128;      // 第3关节到第4关节的长度  145
@@ -129,12 +129,15 @@ const int y_camera_min = 0;
 const int x_camera_max = 640;
 const int y_camera_max = 480;
 
-
+const int x_roi_min = 280;
+const int y_roi_min = 0;
+const int x_roi_max = 560;
+const int y_roi_max = 200;
 // Robot Kolunun Çalışma Alanı Koordinatları
-const float robot_X_min = 0;
-const float robot_X_max = 270;
-const float robot_Y_min = 0;
-const float robot_Y_max = 350;
+const float robot_X_min = 30;
+const float robot_X_max = 200;
+const float robot_Y_min = 30;
+const float robot_Y_max = 220;
 
 int currentTheta_1 = 180;
 int currentTheta_2 = 120;
@@ -142,13 +145,77 @@ int currentTheta_3 = 70;
 int currentTheta_4 = 30;
 int currentTheta_5 = 90;
 
-// Global değişkenler
-float x_robot = 260;
-float y_robot = 260;
+int x_robot;
+int y_robot;
 bool obj_type =-1;
 bool pickObj = false;
 
+float mapCameraToRobotX(int y_camera) {
+    // Kamera Y'yi ROI y_roi_min/y_roi_max arasına kısıtla
+    y_camera = max(y_roi_min, min(y_camera, y_roi_max));
+    
+    // Oranı hesapla (ters çevirme yapılmıyor, direkt lineer)
+    float y_ratio = (float)(y_camera - y_roi_min) / (y_roi_max - y_roi_min);
+    
+    // Robot X'i hesapla
+    return robot_X_min + y_ratio * (robot_X_max - robot_X_min);
+}
 
+// Kamera X → Robot Y
+float mapCameraToRobotY(int x_camera) {
+    // Kamera X'i ROI sınırlarına kısıtla
+    x_camera = max(x_roi_min, min(x_camera, x_roi_max));
+    
+    // Oranı hesapla (Ters çevirme YAPILMADI)
+    float x_ratio = (float)(x_camera - x_roi_min) / (x_roi_max - x_roi_min); // Düzeltme burada!
+    
+    // Robot Y'yi hesapla
+    return robot_Y_min + x_ratio * (robot_Y_max - robot_Y_min);
+}
+
+void parseData(String data) {
+  Serial.print("Alınan veri: ");
+  Serial.println(data);
+  Serial.println("PROCESSING_START"); 
+
+  int commaIndex1 = data.indexOf(',');
+  int commaIndex2 = data.indexOf(',', commaIndex1 + 1);
+  int commaIndex3 = data.indexOf(',', commaIndex2 + 1);
+  int commaIndex4 = data.indexOf(',', commaIndex3 + 1);
+
+  if (commaIndex1 != -1 && commaIndex2 != -1 && commaIndex3 != -1 && commaIndex4 != -1) {
+    float obj_X_min = data.substring(0, commaIndex1).toFloat();
+    float obj_Y_min = data.substring(commaIndex1 + 1, commaIndex2).toFloat();
+    float obj_X_max = data.substring(commaIndex2 + 1, commaIndex3).toFloat();
+    float obj_Y_max = data.substring(commaIndex3 + 1, commaIndex4).toFloat();
+    obj_type = (data.substring(commaIndex4 + 1).toInt() == 1); // "1" -> Kaşık, "0" -> Çatal
+
+    // Nesnenin merkez koordinatlarını hesapla
+    float obj_corX = (obj_X_min + obj_X_max) / 2.0;
+    float obj_corY = (obj_Y_min + obj_Y_max) / 2.0;
+
+ 
+
+    // Kameradan gelen koordinatları robot koordinatlarına dönüştür
+    x_robot = mapCameraToRobotX(obj_corY);
+    y_robot = mapCameraToRobotY(obj_corX);
+    x_robot=220;
+    y_robot=220;
+    Serial.print(" x_robot: ");
+    Serial.println(x_robot);
+    Serial.print("\y_robot");
+    Serial.println(y_robot);
+    
+
+
+    pickObj = false;
+    
+  } else {
+    Serial.println("Hatalı veri formatı! Beklenen format: xmin,ymin,xmax,ymax,object_type");
+    pickObj = true;
+    Serial.println("READY");
+  }
+}
 void setServoAngle(uint8_t servo, uint8_t angle) {
   uint16_t pulselen = map(angle, 0, 180, SERVOMIN, SERVOMAX);
   pwm.setPWM(servo, 0, pulselen); // servos[servo][0] servo motorunun pin numarasını belirtir
@@ -186,6 +253,7 @@ void moveToPosition(bool act, int x, int y, int z, float tet1 = -1, float tet2 =
   float targetTheta_4 = (tet4 >= 0) ? constrain(tet4, 0, 170) : calculatedTheta_4;
 
 
+
   if (slow) {
     smoothMove(servonum3, currentTheta_3, 180 - targetTheta_3, dtime);
     currentTheta_3 = 180-targetTheta_3;
@@ -196,6 +264,7 @@ void moveToPosition(bool act, int x, int y, int z, float tet1 = -1, float tet2 =
     smoothMove(servonum1, currentTheta_1, targetTheta_1, dtime);
     currentTheta_1 = targetTheta_1;
     digitalWrite(RELAY_PIN,act);
+    
     
   } else {
     setServoAngle(servonum2, targetTheta_2);
@@ -215,133 +284,42 @@ void moveToPosition(bool act, int x, int y, int z, float tet1 = -1, float tet2 =
 
 }
 
+
+
+
+
 void go_obj() {
   Serial.println("Obje tespit edildi, objeye gidiliyor...");
-  
-  // 1. Objeye yaklaş
-  moveToPosition(false, x_robot, y_robot, 180, -1, -1, -1, 10, true, 20);
-  
-  // 2. Objeyi al
-  moveToPosition(true, x_robot, y_robot, 140, -1, -1, -1, 10, true, 20);
-  delay(1000);
+
+  Serial.print(x_robot);
+  moveToPosition(true, x_robot, y_robot, 200, -1, 120, -1, 10, true, 20);
+  moveToPosition(true, x_robot, y_robot, 200, -1, -1, -1, 10, true, 30);
+  moveToPosition(true, x_robot, y_robot, 140, -1, -1, -1, 10, true, 200);
   Serial.println("Mıknatıs aktifleştirildi.");
 
-<<<<<<< HEAD
   // 3. Çöp kutusuna taşı
   if (obj_type == 0) { // Çatal
-    moveToPosition(true, -140, 270, 200, -1, 120, -1, 30, true, 40);
-    moveToPosition(false, -140, 270, 200, -1, 70, -1, 30, true, 40);
-    moveToPosition(false, -140, 270, 200, -1, 120, 90, 30, true, 40);
+    moveToPosition(true, x_robot, y_robot, 140, 110, 120, 90, 50, true, 30);
+    moveToPosition(false, x_robot, y_robot, 140, 110, 50, 110, 50, true, 30);
+    
   } else if (obj_type == 1) { // Kaşık
-    moveToPosition(true, -170, 270, 200, -1, 120, -1, 30, true, 40);
-    moveToPosition(false, -170, 270, 200, -1, -1, -1,70 , true, 40);
-    moveToPosition(false, -170, 270, 200, -1, 120, 90, 30, true, 40);
+    moveToPosition(true, x_robot, y_robot, 170, 110, 120, 90, 50, true, 30);
+    moveToPosition(false, x_robot, y_robot, 170, 110, 70, 80, 50, true, 30);
+ 
   }
   
-  // 4. Eve dön
+  moveToPosition(false, x_robot, y_robot, 140, 110, 120, 90, 50, true, 20);
   go_home();
   Serial.println("READY");
-=======
-
-    Serial.println("Obje tespit edildi, objeye gidiliyor...");
-    moveToPosition(true,x_robot, y_robot, 200, -1, 120, 90, -1, true, 10);
-    delay(10);
-    Serial.println("Mıknatıs aktifleştiriliyor...");
-    moveToPosition(true,x_robot, y_robot, 200, -1, -1, -1, 5, true, 10);
-    delay(10); 
-    moveToPosition(true,x_robot, y_robot, 140, -1, -1, -1, 5, true, 10);
-
-    if (obj_type == 0) {  // Çatal
-        Serial.println("Robot çatalı çöpe atmaya gidiyor...");
-        moveToPosition(true, -150, 230, 250, -1, 120, 90, 90, true, 40);
-        moveToPosition(false, -150, 230, 250, -1, 80, 90, 90, true, 40);
-        delay(1000);
-
-    } else if (obj_type == 1) {  // Kaşık
-        Serial.println("Robot kaşığı çöpe atmaya gidiyor...");
-        moveToPosition(true, -170, 60, 250, -1, 120, 90, 80, true, 40);
-        moveToPosition(false, -170, 60, 250, -1, 80, 90, 80, true, 40);
-        delay(1000);
-    } else {
-        Serial.println("Hata: Obje tipi tanımlanamıyor!");
-    }
-
-    Serial.println("Mıknatıs kapatılıyor...");
-    
->>>>>>> ada0e95f369c21944671615f98c7c2b624a3c8c0
 }
 
 
 void go_home() {
   Serial.println("Robot eve gidiyor...");
-<<<<<<< HEAD
-  moveToPosition(false, 0, 0,0, 180, 120, 80, 5, true);  // Home pozisyonu için sabit açı değerleri
+  moveToPosition(false, 0, 150,200, 180, -1, -1, -1, true,15);  // Home pozisyonu için sabit açı değerleri
  // Robotun ev pozisyonuna gitmesi için hareket
 }
-
-
-void parseData(String data) {
-  Serial.print("Alınan veri: ");
-  Serial.println(data);
-  Serial.println("PROCESSING_START"); 
-
-=======
-  moveToPosition(0, 0, 0,0, 180, 120, 80, 5, true);  // Home pozisyonu için sabit açı değerleri
- // Robotun ev pozisyonuna gitmesi için hareket
-}
-
-
-void parseData(String data) {
-  Serial.print("Alınan veri: ");
-  Serial.println(data);
-  
-
->>>>>>> ada0e95f369c21944671615f98c7c2b624a3c8c0
-  int commaIndex1 = data.indexOf(',');
-  int commaIndex2 = data.indexOf(',', commaIndex1 + 1);
-  int commaIndex3 = data.indexOf(',', commaIndex2 + 1);
-  int commaIndex4 = data.indexOf(',', commaIndex3 + 1);
-
-  if (commaIndex1 != -1 && commaIndex2 != -1 && commaIndex3 != -1 && commaIndex4 != -1) {
-    float obj_X_min = data.substring(0, commaIndex1).toFloat();
-    float obj_Y_min = data.substring(commaIndex1 + 1, commaIndex2).toFloat();
-    float obj_X_max = data.substring(commaIndex2 + 1, commaIndex3).toFloat();
-    float obj_Y_max = data.substring(commaIndex3 + 1, commaIndex4).toFloat();
-    obj_type = (data.substring(commaIndex4 + 1).toInt() == 1); // "1" -> Kaşık, "0" -> Çatal
-
-    // Nesnenin merkez koordinatlarını hesapla
-    float obj_corX = (obj_X_min + obj_X_max) / 2.0;
-    float obj_corY = (obj_Y_min + obj_Y_max) / 2.0;
-
- 
-
-    // Kameradan gelen koordinatları robot koordinatlarına dönüştür
-    x_robot = robot_X_min + (obj_corX - x_camera_min) * (robot_X_max - robot_X_min) / (x_camera_max - x_camera_min);
-<<<<<<< HEAD
-    y_robot = robot_Y_min + (y_camera_max - obj_corY) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min);
-    x_robot= x_robot+52;
-    y_robot=y_robot-10;
-    Serial.print(" x_robot: ");
-    Serial.print(x_robot);
-    Serial.print("\y_robot");
-    Serial.print(y_robot);
-    
-
-
-=======
-    y_robot = robot_Y_min + (obj_corY - y_camera_min) * (robot_Y_max - robot_Y_min) / (y_camera_max - y_camera_min);
->>>>>>> ada0e95f369c21944671615f98c7c2b624a3c8c0
-    pickObj = false;
-    
-  } else {
-    Serial.println("Hatalı veri formatı! Beklenen format: xmin,ymin,xmax,ymax,object_type");
-    pickObj = true;
-<<<<<<< HEAD
-    Serial.println("READY");
-  }
-}
-
-
+// Kamera Y → Robot X
 
 
 void loop() {
@@ -376,48 +354,3 @@ void loop() {
 }
 
 // Hareket tamamlandığında bu fonksiyon çağrılabilir
-=======
-  }
-}
-
-
-
-
-String lastDetectedObject = "";
-bool isMoved = false;
-
-void loop() {
-  if (Serial.available() > 0) {
-    String data = Serial.readStringUntil('\n');
-    parseData(data);
-    
-    if (!pickObj) {
-      Serial.println("PROCESSING_START"); // İşlem başlangıç sinyali
-      go_obj();
-      isMoved = true;
-    }
-  }else{go_home();}
-
-  if (isMoved) {
-    go_home();
-    isMoved = false;
-    Serial.println("READY"); // Hazır olduğunu bildir
-    delay(1000);
-  }
-
-
-  // Debug verileri yazdır
-  #ifdef DEBUG
-  Serial.print(" Servo: ");
-  Serial.print(Theta_1);
-  Serial.print("\t");
-  Serial.print(Theta_2);
-  Serial.print("\t");
-  Serial.print(180 - Theta_3);
-  Serial.print("\t");
-  Serial.println(Theta_4);
-  #endif
-}
-
-// Hareket tamamlandığında bu fonksiyon çağrılabilir
->>>>>>> ada0e95f369c21944671615f98c7c2b624a3c8c0

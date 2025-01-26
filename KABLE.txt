@@ -1,8 +1,0 @@
-
-
-servo 1 pwm beyaz kırmızı siyah
-seervo 2 turuncu yeşil lacil 
-SERVO 3 PWM SİYAH sarı yeşiş
-SERVO 4 PWM YEŞİL kırmızı beyaz 
-
-SERVO 5 pwm laci yeş yeş
